@@ -1,0 +1,214 @@
+package com.exemplo.rede;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class RedeSocialApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(RedeSocialApplication.class, args);
+    }
+}
+
+java
+Copiar código
+package com.exemplo.rede.model;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class Usuario {
+    private UUID id;
+    private String nome;
+    private String email;
+    private List<Tweet> tweets = new ArrayList<>();
+
+    public Usuario(String nome, String email) {
+        this.id = UUID.randomUUID();
+        this.nome = nome;
+        this.email = email;
+    }
+
+    public UUID getId() {
+        return id;
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public List<Tweet> getTweets() {
+        return tweets;
+    }
+}
+
+java
+Copiar código
+package com.exemplo.rede.model;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public class Tweet {
+    private UUID tweetId;
+    private String mensagem;
+    private boolean editado;
+    private LocalDateTime dataCriacao;
+
+    public Tweet(String mensagem) {
+        this.tweetId = UUID.randomUUID();
+        this.mensagem = mensagem;
+        this.editado = false;
+        this.dataCriacao = LocalDateTime.now();
+    }
+
+    public UUID getTweetId() {
+        return tweetId;
+    }
+
+    public String getMensagem() {
+        return mensagem;
+    }
+
+    public void setMensagem(String mensagem) {
+        this.mensagem = mensagem;
+    }
+
+    public boolean isEditado() {
+        return editado;
+    }
+
+    public void setEditado(boolean editado) {
+        this.editado = editado;
+    }
+
+    public LocalDateTime getDataCriacao() {
+        return dataCriacao;
+    }
+}
+
+java
+Copiar código
+package com.exemplo.rede.service;
+
+import com.exemplo.rede.model.Tweet;
+import com.exemplo.rede.model.Usuario;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+@Service
+public class UsuarioService {
+    private List<Usuario> usuarios = new ArrayList<>();
+
+    public UsuarioService() {
+        // Inicializa alguns usuários de exemplo
+        usuarios.add(new Usuario("Alice", "alice@email.com"));
+        usuarios.add(new Usuario("Bob", "bob@email.com"));
+    }
+
+    public List<Usuario> listarUsuarios() {
+        return usuarios;
+    }
+
+    public Optional<Usuario> buscarUsuario(UUID id) {
+        return usuarios.stream()
+                .filter(u -> u.getId().equals(id))
+                .findFirst();
+    }
+
+    public List<Tweet> listarTweets(UUID usuarioId) {
+        return buscarUsuario(usuarioId)
+                .map(Usuario::getTweets)
+                .orElse(Collections.emptyList());
+    }
+
+    public Tweet criarTweet(UUID usuarioId, String mensagem) {
+        Usuario usuario = buscarUsuario(usuarioId)
+                .orElseThrow(() -> new NoSuchElementException("Usuário não encontrado"));
+        Tweet tweet = new Tweet(mensagem);
+        usuario.getTweets().add(tweet);
+        return tweet;
+    }
+
+    public Tweet atualizarTweet(UUID usuarioId, UUID tweetId, String novaMensagem) {
+        Usuario usuario = buscarUsuario(usuarioId)
+                .orElseThrow(() -> new NoSuchElementException("Usuário não encontrado"));
+        Tweet tweet = usuario.getTweets().stream()
+                .filter(t -> t.getTweetId().equals(tweetId))
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException("Tweet não encontrado"));
+        tweet.setMensagem(novaMensagem);
+        tweet.setEditado(true);
+        return tweet;
+    }
+
+    public void removerTweet(UUID usuarioId, UUID tweetId) {
+        Usuario usuario = buscarUsuario(usuarioId)
+                .orElseThrow(() -> new NoSuchElementException("Usuário não encontrado"));
+        usuario.getTweets().removeIf(t -> t.getTweetId().equals(tweetId));
+    }
+}
+
+java
+Copiar código
+package com.exemplo.rede.controller;
+
+import com.exemplo.rede.model.Tweet;
+import com.exemplo.rede.model.Usuario;
+import com.exemplo.rede.service.UsuarioService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/usuarios")
+public class UsuarioController {
+
+    private final UsuarioService usuarioService;
+
+    public UsuarioController(UsuarioService usuarioService) {
+        this.usuarioService = usuarioService;
+    }
+
+    @GetMapping
+    public List<Usuario> listarUsuarios() {
+        return usuarioService.listarUsuarios();
+    }
+
+    @GetMapping("/{id}/tweets")
+    public ResponseEntity<List<Tweet>> listarTweets(@PathVariable UUID id) {
+        return ResponseEntity.ok(usuarioService.listarTweets(id));
+    }
+
+    @PostMapping("/{id}/tweets")
+    public ResponseEntity<Tweet> criarTweet(@PathVariable UUID id, @RequestBody Map<String, String> body) {
+        String mensagem = body.get("mensagem");
+        Tweet tweet = usuarioService.criarTweet(id, mensagem);
+        return ResponseEntity.ok(tweet);
+    }
+
+    @PatchMapping("/{id}/tweets/{tweetId}")
+    public ResponseEntity<Tweet> atualizarTweet(@PathVariable UUID id,
+                                                @PathVariable UUID tweetId,
+                                                @RequestBody Map<String, String> body) {
+        String novaMensagem = body.get("mensagem");
+        Tweet tweet = usuarioService.atualizarTweet(id, tweetId, novaMensagem);
+        return ResponseEntity.ok(tweet);
+    }
+
+    @DeleteMapping("/{id}/tweets/{tweetId}")
+    public ResponseEntity<Void> deletarTweet(@PathVariable UUID id,
+                                             @PathVariable UUID tweetId) {
+        usuarioService.removerTweet(id, tweetId);
+        return ResponseEntity.noContent().build();
+    }
+}
